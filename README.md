@@ -4,9 +4,8 @@ languages:
 - java
 products:
 - azure
-extensions:
-- services: Compute
-- platforms: java
+description: "Azure Compute sample for managing virtual machines. Create N virtual machines in parallel."
+urlFragment: compute-java-manage-virtual-machines-in-parallel
 ---
 
 # Getting Started with Compute - Manage Virtual Machines In Parallel - in Java #
