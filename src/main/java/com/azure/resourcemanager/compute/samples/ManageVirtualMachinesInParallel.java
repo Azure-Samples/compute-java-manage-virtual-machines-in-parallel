@@ -1,29 +1,28 @@
-/**
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for
- * license information.
- */
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
-package com.microsoft.azure.management.compute.samples;
+package com.azure.resourcemanager.compute.samples;
 
-import com.microsoft.azure.management.Azure;
-import com.microsoft.azure.management.compute.KnownLinuxVirtualMachineImage;
-import com.microsoft.azure.management.compute.VirtualMachine;
-import com.microsoft.azure.management.compute.VirtualMachineSizeTypes;
-import com.microsoft.azure.management.network.Network;
-import com.microsoft.azure.management.resources.ResourceGroup;
-import com.microsoft.azure.management.resources.fluentcore.arm.Region;
-import com.microsoft.azure.management.resources.fluentcore.model.Creatable;
-import com.microsoft.azure.management.resources.fluentcore.utils.SdkContext;
-import com.microsoft.azure.management.storage.StorageAccount;
-import com.microsoft.rest.LogLevel;
+import com.azure.core.credential.TokenCredential;
+import com.azure.core.http.policy.HttpLogDetailLevel;
+import com.azure.core.management.AzureEnvironment;
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.resourcemanager.AzureResourceManager;
+import com.azure.resourcemanager.compute.models.KnownLinuxVirtualMachineImage;
+import com.azure.resourcemanager.compute.models.VirtualMachine;
+import com.azure.resourcemanager.compute.models.VirtualMachineSizeTypes;
+import com.azure.resourcemanager.network.models.Network;
+import com.azure.core.management.Region;
+import com.azure.resourcemanager.resources.fluentcore.model.Creatable;
+import com.azure.core.management.profile.AzureProfile;
+import com.azure.resourcemanager.resources.models.ResourceGroup;
+import com.azure.resourcemanager.samples.Utils;
+import com.azure.resourcemanager.storage.models.StorageAccount;
+import org.apache.commons.lang.time.StopWatch;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
-import org.apache.commons.lang3.time.StopWatch;
 
 /**
  * Azure Compute sample for managing virtual machines -
@@ -33,33 +32,32 @@ public final class ManageVirtualMachinesInParallel {
 
     /**
      * Main function which runs the actual sample.
-     * @param azure instance of the azure client
+     * @param azureResourceManager instance of the azure client
      * @return true if sample runs successfully
      */
-    public static boolean runSample(Azure azure) {
+    public static boolean runSample(AzureResourceManager azureResourceManager) {
         final int vmCount = 10;
         final Region region = Region.US_SOUTH_CENTRAL;
-        final String rgName = SdkContext.randomResourceName("rgCOPP", 24);
-        final String networkName = SdkContext.randomResourceName("vnetCOMV", 24);
-        final String storageAccountName = SdkContext.randomResourceName("stgCOMV", 20);
+        final String rgName = Utils.randomResourceName(azureResourceManager, "rgCOPP", 24);
+        final String networkName = Utils.randomResourceName(azureResourceManager, "vnetCOMV", 24);
+        final String storageAccountName = Utils.randomResourceName(azureResourceManager, "stgCOMV", 20);
         final String userName = "tirekicker";
-        // [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Serves as an example, not for deployment. Please change when using this in your code.")]
-        final String password = "12NewPA$$w0rd!";
+        final String password = Utils.password();
         try {
             // Create a resource group [Where all resources gets created]
-            ResourceGroup resourceGroup = azure.resourceGroups()
+            ResourceGroup resourceGroup = azureResourceManager.resourceGroups()
                     .define(rgName)
                     .withRegion(region)
                     .create();
 
             // Prepare Creatable Network definition [Where all the virtual machines get added to]
-            Creatable<Network> creatableNetwork = azure.networks().define(networkName)
+            Creatable<Network> creatableNetwork = azureResourceManager.networks().define(networkName)
                     .withRegion(region)
                     .withExistingResourceGroup(resourceGroup)
                     .withAddressSpace("172.16.0.0/16");
 
             // Prepare Creatable Storage account definition [For storing VMs disk]
-            Creatable<StorageAccount> creatableStorageAccount = azure.storageAccounts().define(storageAccountName)
+            Creatable<StorageAccount> creatableStorageAccount = azureResourceManager.storageAccounts().define(storageAccountName)
                     .withRegion(region)
                     .withExistingResourceGroup(resourceGroup);
 
@@ -67,7 +65,7 @@ public final class ManageVirtualMachinesInParallel {
             List<Creatable<VirtualMachine>> creatableVirtualMachines = new ArrayList<>();
 
             for (int i = 0; i < vmCount; i++) {
-                Creatable<VirtualMachine> creatableVirtualMachine = azure.virtualMachines().define("VM-" + i)
+                Creatable<VirtualMachine> creatableVirtualMachine = azureResourceManager.virtualMachines().define("VM-" + i)
                         .withRegion(region)
                         .withExistingResourceGroup(resourceGroup)
                         .withNewPrimaryNetwork(creatableNetwork)
@@ -85,7 +83,7 @@ public final class ManageVirtualMachinesInParallel {
             System.out.println("Creating the virtual machines");
             stopwatch.start();
 
-            Collection<VirtualMachine> virtualMachines = azure.virtualMachines().create(creatableVirtualMachines).values();
+            Collection<VirtualMachine> virtualMachines = azureResourceManager.virtualMachines().create(creatableVirtualMachines).values();
 
             stopwatch.stop();
             System.out.println("Created virtual machines");
@@ -96,24 +94,17 @@ public final class ManageVirtualMachinesInParallel {
 
             System.out.println("Virtual Machines create: (took " + (stopwatch.getTime() / 1000) + " seconds) ");
             return true;
-        } catch (Exception f) {
-
-            System.out.println(f.getMessage());
-            f.printStackTrace();
-
         } finally {
 
             try {
                 System.out.println("Deleting Resource Group: " + rgName);
-                azure.resourceGroups().beginDeleteByName(rgName);
+                azureResourceManager.resourceGroups().beginDeleteByName(rgName);
             } catch (NullPointerException npe) {
                 System.out.println("Did not create any resources in Azure. No clean up is necessary");
             } catch (Exception g) {
                 g.printStackTrace();
             }
         }
-
-        return false;
     }
     /**
      * Main entry point.
@@ -125,17 +116,21 @@ public final class ManageVirtualMachinesInParallel {
             //=============================================================
             // Authenticate
 
-            final File credFile = new File(System.getenv("AZURE_AUTH_LOCATION"));
+            final AzureProfile profile = new AzureProfile(AzureEnvironment.AZURE);
+            final TokenCredential credential = new DefaultAzureCredentialBuilder()
+                .authorityHost(profile.getEnvironment().getActiveDirectoryEndpoint())
+                .build();
 
-            Azure azure = Azure.configure()
-                    .withLogLevel(LogLevel.BASIC)
-                    .authenticate(credFile)
-                    .withDefaultSubscription();
+            AzureResourceManager azureResourceManager = AzureResourceManager
+                .configure()
+                .withLogLevel(HttpLogDetailLevel.BASIC)
+                .authenticate(credential, profile)
+                .withDefaultSubscription();
 
             // Print selected subscription
-            System.out.println("Selected subscription: " + azure.subscriptionId());
+            System.out.println("Selected subscription: " + azureResourceManager.subscriptionId());
 
-            runSample(azure);
+            runSample(azureResourceManager);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             e.printStackTrace();
